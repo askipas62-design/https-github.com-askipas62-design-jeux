@@ -38,7 +38,7 @@ export default function Header() {
               <Sparkles className="text-white" size={18} />
             </motion.div>
             <span className="text-lg sm:text-2xl font-black font-display tracking-tight whitespace-nowrap">
-              <span className="hidden xs:inline">Appiotti </span><span className="text-brand-yellow">Game Shop</span>
+              <span>APPIOTTI </span><span className="text-brand-yellow">game shop</span>
             </span>
           </Link>
 
