@@ -175,10 +175,18 @@ export default function ProductDetail() {
               {/* Product Info area */}
               <div className="p-12 md:p-24 flex flex-col justify-center">
                  <div className="flex items-center gap-1 mb-6 text-brand-yellow">
-                    {[...Array(5)].map((_, i) => (
-                      <Star key={i} size={18} fill={i < Math.floor(product.rating) ? "currentColor" : "none"} />
-                    ))}
-                    <span className="text-xs font-black text-gray-400 ml-3 uppercase tracking-widest">12 avis experts</span>
+                    <div className="flex items-center gap-1">
+                       {[...Array(5)].map((_, i) => (
+                         <Star key={i} size={18} fill={i < Math.floor(product.rating) ? "currentColor" : "none"} />
+                       ))}
+                    </div>
+                    <button 
+                      onClick={() => document.getElementById('reviews')?.scrollIntoView({ behavior: 'smooth' })}
+                      className="text-xs font-black text-gray-400 ml-3 uppercase tracking-widest hover:text-brand-orange transition-colors flex items-center gap-2 group"
+                    >
+                       {reviews.length} avis clients
+                       <MessageSquare size={14} className="group-hover:scale-110 transition-transform" />
+                    </button>
                  </div>
 
                  <h1 className="text-5xl md:text-7xl font-black text-brand-dark mb-8 font-display leading-[0.9] uppercase tracking-tighter">
