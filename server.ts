@@ -189,10 +189,10 @@ async function startServer() {
       // Send confirmation email
       if (resend) {
         try {
-          console.log("POST /api/orders: Attempting email to", "zakaz@forumles.ru");
+          console.log("POST /api/orders: Attempting email to", user.email);
           const { data, error } = await resend.emails.send({
             from: "onboarding@resend.dev",
-            to: ["zakaz@forumles.ru"],
+            to: [user.email || ADMIN_EMAIL], // Send to user or admin if email missing
             subject: `Confirmation de commande ${newOrder.id}`,
             html: `<h1>Merci pour votre commande ${newOrder.id}</h1><p>Total: ${(newOrder.totalTTC || 0).toFixed(2)}€</p><p>Veuillez effectuer le virement pour valider.</p>`
           });
@@ -200,6 +200,18 @@ async function startServer() {
           else console.log("Email sent successfully:", data?.id);
         } catch (mailErr) {
           console.error("Email send critical error:", mailErr);
+        }
+
+        // Also notify Admin
+        try {
+          await resend.emails.send({
+            from: "onboarding@resend.dev",
+            to: [ADMIN_EMAIL],
+            subject: `NOUVELLE COMMANDE - ${newOrder.id}`,
+            html: `<h1>Nouvelle commande de ${user.firstName} ${user.lastName}</h1><p>Total: ${(newOrder.totalTTC || 0).toFixed(2)}€</p>`
+          });
+        } catch (adminMailErr) {
+          console.error("Admin notification error:", adminMailErr);
         }
       } else {
         console.warn("Resend skipped: no client or no user email", { hasResend: !!resend, email: user.email });
@@ -248,10 +260,10 @@ async function startServer() {
       if (resend) {
         const order = orders[orderIndex];
         try {
-          // To Zakaz
+          // To Admin
           await resend.emails.send({
             from: "onboarding@resend.dev",
-            to: ["zakaz@forumles.ru"],
+            to: [ADMIN_EMAIL],
             subject: `NOUVELLE PREUVE - Commande ${order.id}`,
             html: `
               <div style="font-family: sans-serif; border: 2px solid #FF6B35; padding: 20px; border-radius: 10px;">
@@ -285,7 +297,7 @@ async function startServer() {
         hasSupabaseUrl: !!process.env.VITE_SUPABASE_URL,
         hasSupabaseKey: !!process.env.VITE_SUPABASE_ANON_KEY,
         hasResendKey: !!process.env.RESEND_API_KEY,
-        adminEmail: process.env.VITE_ADMIN_EMAIL || "askipas62@gmail.com",
+        adminEmail: ADMIN_EMAIL,
         nodeEnv: process.env.NODE_ENV
       },
       user,
@@ -332,7 +344,7 @@ async function startServer() {
           try {
             await resend.emails.send({
               from: "onboarding@resend.dev",
-              to: ["zakaz@forumles.ru"],
+              to: [orderUser.email],
               subject: `Mise à jour de votre commande ${order.id}`,
               html: `
                 <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">

@@ -79,5 +79,32 @@
     "createdAt": "2026-05-12T22:26:14.273Z",
     "proofUploaded": true,
     "proofUrl": "/uploads/proofs/proof-ORD-N24P1ARYV-1778624789839.png"
+  },
+  {
+    "id": "ORD-70LS7XNO6",
+    "userId": "328ddff6-95d1-4366-86ae-e94bb1f01e6f",
+    "items": [
+      {
+        "id": "bf-6",
+        "name": "Baby-foot Vintage Bois",
+        "priceHT": 349,
+        "category": "baby-foot",
+        "quantity": 1,
+        "image": "/images/products/baby-foot-vintage-bois.jpg"
+      },
+      {
+        "id": "tp-1",
+        "name": "Table de Tennis Intérieur Standard",
+        "priceHT": 229,
+        "category": "ping-pong",
+        "quantity": 1,
+        "image": "/images/products/table-de-tennis-interieur-standard.jpg"
+      }
+    ],
+    "totalTTC": 693.6,
+    "status": "En cours de validation",
+    "createdAt": "2026-05-13T06:34:41.868Z",
+    "proofUploaded": true,
+    "proofUrl": "/uploads/proofs/proof-ORD-70LS7XNO6-1778654106490.png"
   }
 ]

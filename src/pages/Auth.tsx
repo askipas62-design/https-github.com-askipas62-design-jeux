@@ -94,14 +94,19 @@ export default function Auth({ mode: initialMode }: { mode: "login" | "signup" }
 
       // Sync with local backend for consistency in orders/reviews
       if (data.session?.access_token) {
-        await fetch("/api/auth/me", {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${data.session.access_token}`
-          },
-          body: JSON.stringify({ firstName, lastName })
-        });
+        try {
+          await fetch("/api/auth/me", {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${data.session.access_token}`
+            },
+            body: JSON.stringify({ firstName, lastName })
+          });
+        } catch (syncErr) {
+          console.error("Erreur de synchronisation backend:", syncErr);
+          // On ne bloque pas l'utilisateur si la synchro échoue mais on le log
+        }
       }
 
       addToast("Compte vérifié avec succès. Bienvenue !", "success");
@@ -111,6 +116,7 @@ export default function Auth({ mode: initialMode }: { mode: "login" | "signup" }
         navigate("/boutique");
       }
     } catch (err: any) {
+      console.error("Verification error:", err);
       addToast(err.message || "Code invalide ou expiré", "error");
     } finally {
       setLoading(false);

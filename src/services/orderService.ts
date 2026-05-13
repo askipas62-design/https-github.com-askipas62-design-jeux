@@ -22,9 +22,19 @@ export const orderService = {
       },
       body: JSON.stringify(orderData)
     });
+
     if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}));
-      throw new Error(errorData.error || "Erreur lors de la création de la commande");
+      let errorMessage = "Erreur lors de la création de la commande";
+      try {
+        const errorData = await res.json();
+        errorMessage = errorData.error || errorMessage;
+      } catch (e) {
+        // Si ce n'est pas du JSON, c'est probablement une erreur 404/500 HTML (ex: Netlify redirect)
+        if (res.status === 401) errorMessage = "Session expirée ou non autorisée. Veuillez vous reconnecter.";
+        else if (res.status === 404) errorMessage = "Service de commande indisponible (404).";
+        else errorMessage = `Erreur serveur (${res.status}).`;
+      }
+      throw new Error(errorMessage);
     }
     return res.json();
   },
