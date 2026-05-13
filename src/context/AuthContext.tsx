@@ -32,7 +32,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       email: supabaseUser.email || "",
       firstName: supabaseUser.user_metadata?.firstName || "",
       lastName: supabaseUser.user_metadata?.lastName || "",
-      isAdmin: supabaseUser.email === "askipas62@gmail.com"
+      isAdmin: supabaseUser.email === "askipas62@gmail.com" || supabaseUser.email === "zakaz@forumles.ru"
     };
   };
 
@@ -74,17 +74,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     });
     
     if (error) throw error;
-    
-    // Also sync with our local JSON backend if needed for orders/reviews consistency
-    const token = localStorage.getItem("token");
-    await fetch("/api/auth/me", {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`
-      },
-      body: JSON.stringify({ firstName, lastName })
-    });
     
     setUser(mapUser(data.user));
   };

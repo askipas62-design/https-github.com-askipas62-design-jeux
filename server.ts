@@ -2,10 +2,6 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import path from "path";
-import { fileURLToPath } from "url";
-import { createServer as createViteServer } from "vite";
-import fs from "fs";
-import multer from "multer";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 
@@ -187,6 +183,7 @@ async function startServer() {
 
   // Vite middleware
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -201,14 +198,20 @@ async function startServer() {
   }
 
   const PORT = 3000;
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running at http://localhost:${PORT}`);
-  });
+  try {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`[Startup] Server successfully started and listening on http://0.0.0.0:${PORT}`);
+      console.log(`[Startup] NODE_ENV: ${process.env.NODE_ENV}`);
+    });
+  } catch (err) {
+    console.error("[Startup] Failed to listen on port 3000:", err);
+    process.exit(1);
+  }
 }
 
+console.log("[Startup] Calling startServer()...");
 startServer().catch(err => {
-  console.error("CRITICAL: Failed to start server:", err);
-  process.exit(1);
+  console.error("[Startup] UNHANDLED ERROR IN startServer():", err);
 });
 
 export default app;

@@ -39,26 +39,7 @@ export default function Auth({ mode: initialMode }: { mode: "login" | "signup" }
 
       addToast(`Bienvenue ${data.user.user_metadata?.firstName || 'Aventurier'} ! Heureux de vous revoir !`, "success");
       
-      // Sync profile on login too
-      if (data.session?.access_token) {
-        try {
-          await fetch("/api/auth/me", {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${data.session.access_token}`
-            },
-            body: JSON.stringify({ 
-              firstName: data.user.user_metadata?.firstName || "", 
-              lastName: data.user.user_metadata?.lastName || "" 
-            })
-          });
-        } catch (e) {
-          console.error("Profile sync error on login:", e);
-        }
-      }
-
-      const isAdmin = data.user.email === "askipas62@gmail.com";
+      const isAdmin = data.user.email === "askipas62@gmail.com" || data.user.email === "zakaz@forumles.ru";
       navigate(isAdmin ? "/admin/dashboard" : from, { replace: true });
     } catch (err: any) {
       addToast(err.message || "Erreur de connexion", "error");
@@ -85,18 +66,6 @@ export default function Auth({ mode: initialMode }: { mode: "login" | "signup" }
           throw new Error("Cet email est déjà utilisé. Essayez de vous connecter.");
         }
         throw error;
-      }
-
-      // Sync with local backend for consistency in orders/reviews
-      if (data.session?.access_token) {
-        await fetch("/api/auth/me", {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${data.session.access_token}`
-          },
-          body: JSON.stringify({ firstName, lastName })
-        });
       }
 
       addToast("Bienvenue dans l'univers Appiotti ! Vérifiez vos emails si nécessaire.", "success");

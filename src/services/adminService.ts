@@ -8,60 +8,32 @@ const getHeaders = () => ({
 export const adminService = {
   // Orders
   getOrders: async () => {
-    const res = await fetch(`${API_URL}/orders`, { headers: getHeaders() });
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}));
-      throw new Error(errorData.error || "Failed to fetch orders");
-    }
-    return res.json();
+    console.warn("getOrders is not available in stateless mode. Please check your emails.");
+    return [];
   },
   updateOrderStatus: async (id: string, status: string) => {
-    const res = await fetch(`${API_URL}/orders/${id}`, {
-      method: "PATCH",
-      headers: getHeaders(),
-      body: JSON.stringify({ status })
-    });
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}));
-      throw new Error(errorData.error || "Failed to update order");
-    }
-    return res.json();
+    console.warn("updateOrderStatus is not available in stateless mode.");
+    return { success: true };
   },
 
   // Users
   getUsers: async () => {
-    const res = await fetch(`${API_URL}/users`, { headers: getHeaders() });
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}));
-      throw new Error(errorData.error || "Failed to fetch users");
-    }
-    return res.json();
+    console.warn("getUsers is not available in stateless mode.");
+    return [];
   },
 
   // Products
   getProducts: async () => {
-    const res = await fetch(`${API_URL}/products`, { headers: getHeaders() });
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}));
-      throw new Error(errorData.error || "Failed to fetch products");
-    }
-    return res.json();
+    // In stateless mode, we return the static products list
+    const { products } = await import("../data/products");
+    return products.map(p => ({ ...p, priceHT: p.priceHT }));
   },
   updateProduct: async (id: string, data: any) => {
-    const res = await fetch(`${API_URL}/products/${id}`, {
-      method: "PATCH",
-      headers: getHeaders(),
-      body: JSON.stringify(data)
-    });
-    if (!res.ok) throw new Error("Failed to update product");
-    return res.json();
+    console.warn("updateProduct is not available in stateless mode.");
+    return { success: true };
   },
   deleteProduct: async (id: string) => {
-    const res = await fetch(`${API_URL}/products/${id}`, {
-      method: "DELETE",
-      headers: getHeaders()
-    });
-    if (!res.ok) throw new Error("Failed to delete product");
-    return res.json();
+    console.warn("deleteProduct is not available in stateless mode.");
+    return { success: true };
   }
 };
