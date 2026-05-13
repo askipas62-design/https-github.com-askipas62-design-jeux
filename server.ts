@@ -16,8 +16,16 @@ console.log(`[Startup] APP_ROOT: ${APP_ROOT}`);
 const supabaseUrl = process.env.VITE_SUPABASE_URL || "";
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
 
-if (!supabaseUrl) console.warn("[Startup] VITE_SUPABASE_URL is missing!");
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+let supabase: any = null;
+if (supabaseUrl && supabaseUrl.startsWith("http")) {
+  try {
+    supabase = createClient(supabaseUrl, supabaseServiceKey);
+  } catch (err) {
+    console.error("[Startup] Failed to initialize Supabase:", err);
+  }
+} else {
+  console.warn("[Startup] Supabase URL is missing or invalid. Auth might not work.");
+}
 
 // Initialize Resend
 const resendApiKey = process.env.RESEND_API_KEY;
@@ -28,6 +36,10 @@ const ADMIN_EMAIL = "zakaz@forumles.ru";
 
 // Helper for Auth with Supabase
 const getAuthUser = async (req: express.Request) => {
+  if (!supabase) {
+    // If no supabase, we might want to return a mock user if in dev or just return null
+    return null;
+  }
   const authHeader = req.headers.authorization;
   if (!authHeader) return null;
   const token = authHeader.split(" ")[1];
@@ -51,7 +63,7 @@ const getAuthUser = async (req: express.Request) => {
 
 const app = express();
 
-async function configureApp() {
+async function startServer() {
   app.use(express.json({ limit: "10mb" }));
   app.use(cors());
 
@@ -61,7 +73,8 @@ async function configureApp() {
       status: "ok", 
       time: new Date().toISOString(),
       env: {
-        hasResendKey: !!process.env.RESEND_API_KEY
+        hasResendKey: !!process.env.RESEND_API_KEY,
+        hasSupabase: !!supabase
       }
     });
   });
@@ -101,10 +114,8 @@ async function configureApp() {
             </div>
           `
         }).catch(err => console.error("Error sending order email:", err));
-      }
 
-      // Send notification email to admin
-      if (resend) {
+        // Send notification email to admin
         await resend.emails.send({
           from: "Alertes Appiotti <onboarding@resend.dev>",
           to: [ADMIN_EMAIL],
@@ -139,7 +150,6 @@ async function configureApp() {
 
   // Proof upload route - Stateless: only sends email
   app.post("/api/orders/:id/proof-stateless", async (req, res) => {
-    const user = await getAuthUser(req);
     const { proofBase64, fileName } = req.body;
     const orderId = req.params.id;
 
@@ -190,18 +200,15 @@ async function configureApp() {
     });
   }
 
-  return app;
-}
-
-const appPromise = configureApp();
-
-if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
-  appPromise.then(() => {
-    const PORT = 3000;
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server running at http://localhost:${PORT}`);
-    });
+  const PORT = 3000;
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running at http://localhost:${PORT}`);
   });
 }
+
+startServer().catch(err => {
+  console.error("CRITICAL: Failed to start server:", err);
+  process.exit(1);
+});
 
 export default app;
