@@ -23,6 +23,10 @@ const CGV = lazy(() => import("./pages/CGV"));
 const ClientDashboard = lazy(() => import("./pages/ClientDashboard"));
 const SafetyAndPayment = lazy(() => import("./pages/SafetyAndPayment"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const FAQ = lazy(() => import("./pages/FAQ"));
+const Privacy = lazy(() => import("./pages/Privacy"));
+const Cookies = lazy(() => import("./pages/Cookies"));
+const Returns = lazy(() => import("./pages/Returns"));
 
 // Protected Route components
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -65,6 +69,10 @@ export default function App() {
                     <Route path="/contact" element={<Contact />} />
                     <Route path="/mentions-legales" element={<Legal />} />
                     <Route path="/cgv" element={<CGV />} />
+                    <Route path="/faq" element={<FAQ />} />
+                    <Route path="/politique-de-confidentialite" element={<Privacy />} />
+                    <Route path="/cookies" element={<Cookies />} />
+                    <Route path="/retour-colis" element={<Returns />} />
                     <Route path="*" element={<Navigate to="/" />} />
                   </Routes>
                 </Suspense>

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Mail, Lock, User, UserPlus, LogIn, ArrowRight, ShieldCheck, Loader2 } from "lucide-react";
+import { Mail, Lock, User, UserPlus, LogIn, ArrowRight, ShieldCheck, Loader2, Eye, EyeOff } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useToast } from "../components/ui/Toast";
 import { motion } from "motion/react";
@@ -12,6 +12,7 @@ export default function Auth({ mode: initialMode }: { mode: "login" | "signup" }
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   
   const { addToast } = useToast();
   const navigate = useNavigate();
@@ -26,9 +27,14 @@ export default function Auth({ mode: initialMode }: { mode: "login" | "signup" }
         password,
       });
       
-      if (error) throw error;
+      if (error) {
+        if (error.message.includes("Invalid login credentials")) {
+          throw new Error("Email ou mot de passe incorrect. Veuillez réessayer.");
+        }
+        throw error;
+      }
 
-      addToast(`Heureux de vous revoir !`, "success");
+      addToast(`Bienvenue ${data.user.user_metadata?.firstName || 'Aventurier'} ! Heureux de vous revoir !`, "success");
       const isAdmin = data.user.email === "askipas62@gmail.com";
       navigate(isAdmin ? "/admin" : "/dashboard");
     } catch (err: any) {
@@ -51,7 +57,12 @@ export default function Auth({ mode: initialMode }: { mode: "login" | "signup" }
         }
       });
       
-      if (error) throw error;
+      if (error) {
+        if (error.message.includes("User already registered")) {
+          throw new Error("Cet email est déjà utilisé. Essayez de vous connecter.");
+        }
+        throw error;
+      }
 
       // Sync with local backend for consistency in orders/reviews
       if (data.session?.access_token) {
@@ -156,12 +167,20 @@ export default function Auth({ mode: initialMode }: { mode: "login" | "signup" }
                 <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-300" size={20} />
                 <input 
                   required
-                  type="password" 
+                  type={showPassword ? "text" : "password"} 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full bg-gray-50 border-2 border-transparent focus:border-[#FF6B35] focus:bg-white rounded-full pl-14 pr-6 py-4 transition-all outline-none font-bold"
+                  className="w-full bg-gray-50 border-2 border-transparent focus:border-[#FF6B35] focus:bg-white rounded-full pl-14 pr-14 py-4 transition-all outline-none font-bold"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#FF6B35] transition-colors"
+                  aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                >
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
               </div>
             </div>
 
