@@ -23,8 +23,15 @@ export const orderService = {
       body: JSON.stringify(orderData)
     });
     if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}));
-      const msg = errorData.error || `Erreur ${res.status}: ${res.statusText}`;
+      const text = await res.text();
+      let errorData: any = {};
+      try {
+        errorData = JSON.parse(text);
+      } catch (e) {
+        errorData = { error: text };
+      }
+      const msg = errorData.error || errorData.details || `Erreur ${res.status}: ${res.statusText}`;
+      console.error("[orderService.create] Failed:", { status: res.status, msg, text });
       throw new Error(msg);
     }
     return res.json();

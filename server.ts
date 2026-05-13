@@ -33,22 +33,35 @@ const UPLOADS_DIR = path.join(__dirname, "public", "uploads", "proofs");
 // Helper for DB
 const readDB = (file: string) => {
   try {
+    if (!fs.existsSync(file)) return [];
     const data = fs.readFileSync(file, "utf-8");
-    return JSON.parse(data || "[]");
+    const parsed = JSON.parse(data || "[]");
+    return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
+    console.error(`Error reading DB file ${file}:`, e);
     return [];
   }
 };
-const writeDB = (file: string, data: any) => fs.writeFileSync(file, JSON.stringify(data, null, 2));
+const writeDB = (file: string, data: any) => {
+  try {
+    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+  } catch (e) {
+    console.error(`Error writing DB file ${file}:`, e);
+    throw e;
+  }
+};
 
 // Initialize files if they don't exist
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 if (!fs.existsSync(USERS_FILE)) writeDB(USERS_FILE, []);
 if (!fs.existsSync(PRODUCTS_FILE)) writeDB(PRODUCTS_FILE, []);
 if (!fs.existsSync(ORDERS_FILE)) writeDB(ORDERS_FILE, []);
 if (!fs.existsSync(REVIEWS_FILE)) writeDB(REVIEWS_FILE, []);
 
 // Initialize Resend
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const resendApiKey = process.env.RESEND_API_KEY;
+const resend = resendApiKey ? new Resend(resendApiKey) : null;
+if (!resendApiKey) console.warn("RESEND_API_KEY is missing. Emails will not be sent.");
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "askipas62@gmail.com";
 
@@ -60,8 +73,8 @@ const getAuthUser = async (req: express.Request) => {
     return null;
   }
   const token = authHeader.split(" ")[1];
-  if (!token) {
-    console.warn("getAuthUser: Token segment missing in Authorization header");
+  if (!token || token === "null" || token === "undefined") {
+    console.warn(`getAuthUser: Invalid token found: ${token}`);
     return null;
   }
   
@@ -96,8 +109,14 @@ const getAuthUser = async (req: express.Request) => {
 const app = express();
 
 async function configureApp() {
-  app.use(express.json());
+  app.use(express.json({ limit: "10mb" }));
   app.use(cors());
+
+  // Logging middleware
+  app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    next();
+  });
 
   // Multer config for proof uploads
   const storage = multer.diskStorage({
@@ -189,23 +208,28 @@ async function configureApp() {
 
   // Orders Routes
   app.post("/api/orders", async (req, res) => {
-    console.log("[POST /api/orders] Incoming request body:", JSON.stringify(req.body, null, 2));
-    
-    const user = await getAuthUser(req);
-    if (!user) {
-      console.warn("[POST /api/orders] Authentication failed or user not found");
-      return res.status(401).json({ error: "Non autorisé" });
-    }
-    
-    console.log(`[POST /api/orders] User identified: ${user.id} (${user.email})`);
+    console.log("[POST /api/orders] Starting request handling");
+    console.log("[POST /api/orders] Body:", JSON.stringify(req.body, null, 2));
     
     try {
-      const { items, totalTTC, id: customId } = req.body;
-      const orderId = customId || ("ORD-" + Math.random().toString(36).substr(2, 9).toUpperCase());
+      const user = await getAuthUser(req);
+      if (!user) {
+        console.warn("[POST /api/orders] Auth failed");
+        return res.status(401).json({ error: "Non autorisé" });
+      }
       
-      console.log(`[POST /api/orders] Processing order ${orderId} for ${user.id}`);
+      console.log(`[POST /api/orders] User identified: ${user.id} (${user.email})`);
+      
+      const { items, totalTTC, id: customId } = req.body;
+      const orderId = customId || ("ORD-" + Math.random().toString(36).substring(2, 11).toUpperCase());
+      
+      console.log(`[POST /api/orders] Creating order ${orderId} with ${items?.length || 0} items`);
       
       const orders = readDB(ORDERS_FILE);
+      if (!Array.isArray(orders)) {
+        console.error("[POST /api/orders] CRITICAL: readDB(ORDERS_FILE) did not return an array despite safety check!");
+        throw new Error("Erreur interne: la base de données des commandes est corrompue");
+      }
       
       const newOrder = {
         id: orderId,
@@ -220,13 +244,12 @@ async function configureApp() {
 
       orders.push(newOrder);
       writeDB(ORDERS_FILE, orders);
-
-      console.log(`[POST /api/orders] Order ${orderId} saved locally. total_ttc: ${newOrder.total_ttc}`);
+      console.log(`[POST /api/orders] Order ${orderId} successfully written to ${ORDERS_FILE}`);
 
       // Send confirmation email
       if (resend && user.email) {
         try {
-          console.log(`[POST /api/orders] Attempting to send confirmation email to ${user.email}`);
+          console.log(`[POST /api/orders] Sending confirmation email to ${user.email} via Resend...`);
           const { data: emailData, error: emailError } = await resend.emails.send({
             from: "Appiotti <onboarding@resend.dev>",
             to: [user.email],
@@ -241,28 +264,35 @@ async function configureApp() {
             `
           });
           if (emailError) {
-            console.error("[POST /api/orders] Resend error:", emailError);
+            console.error("[POST /api/orders] Resend API error:", emailError);
           } else {
-            console.log("[POST /api/orders] Confirmation email sent:", emailData);
+            console.log("[POST /api/orders] Resend success:", emailData);
           }
-        } catch (mailErr) {
-          console.error("[POST /api/orders] Email send failed (unexpected):", mailErr);
+        } catch (mailErr: any) {
+          console.error("[POST /api/orders] Resend unexpected crash:", mailErr.message);
         }
       } else {
-        console.warn("[POST /api/orders] Email not sent: resend not configured OR user email missing");
+        console.log("[POST /api/orders] Email notification skipped (no resend client or user email)");
       }
 
-      res.json({
+      const responseBody = {
         ...newOrder,
         userId: newOrder.user_id,
         totalTTC: newOrder.total_ttc,
         proofUploaded: newOrder.proof_uploaded,
         proofUrl: newOrder.proof_url,
         createdAt: newOrder.created_at
-      });
+      };
+      
+      console.log(`[POST /api/orders] Returning response for order ${orderId}`);
+      res.json(responseBody);
     } catch (e: any) {
-      console.error("[POST /api/orders] Error:", e);
-      res.status(500).json({ error: "Erreur serveur lors de la création de la commande: " + (e.message || "Unknown error") });
+      console.error("[POST /api/orders] UNCAUGHT EXCEPTION:", e);
+      res.status(500).json({ 
+        error: "Erreur serveur lors de la création de la commande", 
+        details: e.message,
+        stack: process.env.NODE_ENV === "development" ? e.stack : undefined
+      });
     }
   });
 
@@ -610,6 +640,16 @@ async function configureApp() {
 
   // Static files for uploads
   app.use("/uploads", express.static(path.join(__dirname, "public", "uploads")));
+
+  // Global Error Handler
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error("[GLOBAL ERROR HANDLER]:", err);
+    res.status(500).json({ 
+      error: "Erreur serveur critique", 
+      details: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined
+    });
+  });
 
   // Vite middleware
   if (process.env.NODE_ENV !== "production") {
