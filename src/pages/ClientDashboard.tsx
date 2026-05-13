@@ -15,7 +15,7 @@ import ProductCard from "../components/ProductCard";
 
 import { orderService } from "../services/orderService";
 import { reviewService } from "../services/reviewService";
-import { products as localProducts } from "../data/products";
+import { products as allProducts } from "../data/products";
 
 interface Order {
   id: string;
@@ -51,7 +51,7 @@ export default function ClientDashboard() {
   const [submittingReview, setSubmittingReview] = useState(false);
 
   const favoriteProducts = useMemo(() => {
-    return localProducts.filter(p => wishlist.includes(p.id));
+    return allProducts.filter(p => wishlist.includes(p.id));
   }, [wishlist]);
 
   const allPurchasedProducts = useMemo(() => {
@@ -344,7 +344,7 @@ export default function ClientDashboard() {
                                  <h4 className="text-lg font-black text-brand-dark font-display uppercase tracking-tight mb-8">Articles commandés</h4>
                                  <div className="space-y-6">
                                    {order.items.map((item, idy) => {
-                                     const productInfo = localProducts.find(p => p.id === item.id);
+                                     const productInfo = allProducts.find(p => p.id === item.id);
                                      const itemImage = item.image || productInfo?.image;
 
                                      return (

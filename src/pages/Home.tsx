@@ -77,11 +77,9 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    // Simuler chargement
-    setTimeout(() => {
-      setFeaturedProducts(allProducts.slice(0, 8));
-      setLoading(false);
-    }, 200);
+    // Les produits sont locaux
+    setFeaturedProducts(allProducts.slice(0, 8));
+    setLoading(false);
   }, []);
 
   const categories = [

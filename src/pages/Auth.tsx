@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Mail, Lock, User, UserPlus, LogIn, ArrowRight, ShieldCheck, Loader2, Eye, EyeOff } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useToast } from "../components/ui/Toast";
@@ -16,6 +16,9 @@ export default function Auth({ mode: initialMode }: { mode: "login" | "signup" }
   
   const { addToast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const from = location.state?.from?.pathname || "/client/dashboard";
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,7 +39,7 @@ export default function Auth({ mode: initialMode }: { mode: "login" | "signup" }
 
       addToast(`Bienvenue ${data.user.user_metadata?.firstName || 'Aventurier'} ! Heureux de vous revoir !`, "success");
       const isAdmin = data.user.email === "askipas62@gmail.com";
-      navigate(isAdmin ? "/admin" : "/dashboard");
+      navigate(isAdmin ? "/admin/dashboard" : from, { replace: true });
     } catch (err: any) {
       addToast(err.message || "Erreur de connexion", "error");
     } finally {
@@ -77,7 +80,7 @@ export default function Auth({ mode: initialMode }: { mode: "login" | "signup" }
       }
 
       addToast("Bienvenue dans l'univers Appiotti ! Vérifiez vos emails si nécessaire.", "success");
-      navigate("/boutique");
+      navigate(from, { replace: true });
     } catch (err: any) {
       addToast(err.message || "Erreur d'inscription", "error");
     } finally {

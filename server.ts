@@ -14,8 +14,8 @@ const __dirname = path.dirname(__filename);
 
 // Supabase Server Client
 const supabaseUrl = process.env.VITE_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 // Data paths
 const DATA_DIR = path.join(__dirname, "data");
@@ -65,11 +65,6 @@ const getAuthUser = async (req: express.Request) => {
     return null;
   }
   
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.error("getAuthUser: Supabase URL or Anon Key is missing in environment variables!");
-    return null;
-  }
-
   try {
     const { data: { user }, error } = await supabase.auth.getUser(token);
     if (error) {
@@ -111,53 +106,81 @@ async function configureApp() {
   const upload = multer({ storage });
 
   // Auth Sync (Legacy consistency, used for local storage logic if needed)
+  // Auth Sync
   app.patch("/api/auth/me", async (req, res) => {
     const authUser = await getAuthUser(req);
     if (!authUser) return res.status(401).json({ error: "Non autorisé" });
     
     try {
-      const users = readDB(USERS_FILE);
-      const userIndex = users.findIndex((u: any) => u.id === authUser.id);
-      
       const { firstName, lastName } = req.body;
 
-      if (userIndex !== -1) {
-        users[userIndex].firstName = firstName;
-        users[userIndex].lastName = lastName;
-        writeDB(USERS_FILE, users);
-      } else {
-        users.push({
+      const { error } = await supabase
+        .from("profiles")
+        .upsert({
           id: authUser.id,
           email: authUser.email,
-          firstName,
-          lastName,
-          isAdmin: authUser.isAdmin
-        });
-        writeDB(USERS_FILE, users);
-      }
+          first_name: firstName,
+          last_name: lastName,
+          is_admin: authUser.isAdmin
+        }, { onConflict: 'id' });
 
+      if (error) throw error;
       res.json({ success: true });
-    } catch (e) {
+    } catch (e: any) {
+      console.error("Auth sync error:", e);
       res.status(500).json({ error: "Erreur serveur" });
     }
   });
 
   // Product Routes
-  app.get("/api/products", (req, res) => {
-    let products = readDB(PRODUCTS_FILE);
-    const { category, minPrice, maxPrice, q } = req.query;
-    if (category) products = products.filter((p: any) => p.category === category);
-    if (minPrice) products = products.filter((p: any) => p.priceHT * 1.2 >= Number(minPrice));
-    if (maxPrice) products = products.filter((p: any) => p.priceHT * 1.2 <= Number(maxPrice));
-    if (q) products = products.filter((p: any) => p.name.toLowerCase().includes(String(q).toLowerCase()));
-    res.json(products);
+  app.get("/api/products", async (req, res) => {
+    try {
+      let query = supabase.from("products").select("*");
+      const { category, minPrice, maxPrice, q } = req.query;
+      
+      if (category) query = query.eq("category", category);
+      if (minPrice) query = query.gte("price_ht", Number(minPrice) / 1.2);
+      if (maxPrice) query = query.lte("price_ht", Number(maxPrice) / 1.2);
+      if (q) query = query.ilike("name", `%${q}%`);
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      
+      // Map to frontend camelCase
+      const mapped = data.map((p: any) => ({
+        ...p,
+        priceHT: p.price_ht,
+      }));
+      
+      res.json(mapped);
+    } catch (e) {
+      console.error("GET /api/products error:", e);
+      res.status(500).json({ error: "Erreur lors de la récupération des produits" });
+    }
   });
 
-  app.get("/api/products/:id", (req, res) => {
-    const products = readDB(PRODUCTS_FILE);
-    const product = products.find((p: any) => p.id === req.params.id);
-    if (!product) return res.status(404).json({ error: "Produit non trouvé" });
-    res.json(product);
+  app.get("/api/products/:id", async (req, res) => {
+    try {
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .eq("id", req.params.id)
+        .maybeSingle();
+      
+      if (error) throw error;
+      if (!data) return res.status(404).json({ error: "Produit non trouvé" });
+      
+      // Map to frontend camelCase
+      const mapped = {
+        ...data,
+        priceHT: data.price_ht,
+      };
+      
+      res.json(mapped);
+    } catch (e) {
+      console.error("GET /api/products/:id error:", e);
+      res.status(500).json({ error: "Erreur serveur" });
+    }
   });
 
   // Orders Routes
@@ -166,53 +189,50 @@ async function configureApp() {
     if (!user) return res.status(401).json({ error: "Non autorisé" });
     
     try {
-      console.log("POST /api/orders: starting for user", user.id);
-      const orders = readDB(ORDERS_FILE);
+      const orderId = req.body.id || ("ORD-" + Math.random().toString(36).substr(2, 9).toUpperCase());
       const newOrder = {
-        id: req.body.id || ("ORD-" + Math.random().toString(36).substr(2, 9).toUpperCase()),
-        userId: user.id,
+        id: orderId,
+        user_id: user.id,
         items: req.body.items || [],
-        totalTTC: req.body.totalTTC || 0,
+        total_ttc: req.body.totalTTC || 0,
         status: "En attente de virement",
-        createdAt: new Date().toISOString(),
-        proofUploaded: false
+        proof_uploaded: false
       };
       
-      if (newOrder.items.length === 0) {
-        console.warn("POST /api/orders: Order with no items received");
-      }
+      const { data, error } = await supabase
+        .from("orders")
+        .insert(newOrder)
+        .select()
+        .single();
 
-      orders.push(newOrder);
-      writeDB(ORDERS_FILE, orders);
-      console.log("POST /api/orders: Order saved", newOrder.id);
+      if (error) throw error;
 
       // Send confirmation email
       if (resend && user.email) {
         try {
-          console.log("POST /api/orders: Attempting email to", user.email);
-          const { data, error } = await resend.emails.send({
+          await resend.emails.send({
             from: "Shop <onboarding@resend.dev>",
             to: [user.email],
-            subject: `Confirmation de commande ${newOrder.id}`,
-            html: `<h1>Merci pour votre commande ${newOrder.id}</h1><p>Total: ${(newOrder.totalTTC || 0).toFixed(2)}€</p><p>Veuillez effectuer le virement pour valider.</p>`
+            subject: `Confirmation de commande ${orderId}`,
+            html: `<h1>Merci pour votre commande ${orderId}</h1><p>Total: ${(newOrder.total_ttc || 0).toFixed(2)}€</p><p>Veuillez effectuer le virement pour valider.</p>`
           });
-          if (error) console.error("Resend API error:", error);
-          else console.log("Email sent successfully:", data?.id);
         } catch (mailErr) {
-          console.error("Email send critical error:", mailErr);
+          console.error("Email send error:", mailErr);
         }
-      } else {
-        console.warn("Resend skipped: no client or no user email", { hasResend: !!resend, email: user.email });
       }
 
-      res.json(newOrder);
+      const mapped = {
+        ...data,
+        userId: data.user_id,
+        totalTTC: data.total_ttc,
+        proofUploaded: data.proof_uploaded,
+        proofUrl: data.proof_url,
+        createdAt: data.created_at
+      };
+      res.json(mapped);
     } catch (e: any) {
       console.error("POST /api/orders error:", e);
-      res.status(500).json({ 
-        error: "Erreur serveur: " + (e.message || "Inconnue"),
-        details: e.toString(),
-        stack: process.env.NODE_ENV === 'development' ? e.stack : undefined
-      });
+      res.status(500).json({ error: "Erreur serveur" });
     }
   });
 
@@ -221,8 +241,23 @@ async function configureApp() {
     if (!user) return res.status(401).json({ error: "Non autorisé" });
     
     try {
-      const orders = readDB(ORDERS_FILE);
-      res.json(orders.filter((o: any) => o.userId === user.id));
+      const { data, error } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      
+      if (error) throw error;
+      
+      const mapped = data.map((o: any) => ({
+        ...o,
+        userId: o.user_id,
+        totalTTC: o.total_ttc,
+        proofUploaded: o.proof_uploaded,
+        proofUrl: o.proof_url,
+        createdAt: o.created_at
+      }));
+      res.json(mapped);
     } catch (e: any) {
       console.error("GET /api/orders/me error:", e);
       res.status(500).json({ error: "Erreur lors du chargement de vos commandes" });
@@ -234,84 +269,73 @@ async function configureApp() {
     if (!user) return res.status(401).json({ error: "Non autorisé" });
     
     try {
-      const orders = readDB(ORDERS_FILE);
-      const orderIndex = orders.findIndex((o: any) => o.id === req.params.id && o.userId === user.id);
-      if (orderIndex === -1) return res.status(404).json({ error: "Commande non trouvée" });
-      
       const proofUrl = req.file ? `/uploads/proofs/${req.file.filename}` : null;
-      orders[orderIndex].proofUploaded = true;
-      orders[orderIndex].status = "En cours de validation";
-      orders[orderIndex].proofUrl = proofUrl;
-      writeDB(ORDERS_FILE, orders);
+      
+      const { data, error } = await supabase
+        .from("orders")
+        .update({
+          proof_uploaded: true,
+          status: "En cours de validation",
+          proof_url: proofUrl
+        })
+        .eq("id", req.params.id)
+        .eq("user_id", user.id)
+        .select()
+        .single();
+
+      if (error) throw error;
 
       // Notify Admin and User
       if (resend) {
-        const order = orders[orderIndex];
         try {
-          // To User
           if (user.email) {
             await resend.emails.send({
               from: "Appiotti Game Shop <onboarding@resend.dev>",
               to: [user.email],
-              subject: `Preuve de virement reçue - Commande ${order.id}`,
-              html: `
-                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                  <h2 style="color: #06D6A0;">Preuve bien reçue !</h2>
-                  <p>Bonjour ${user.firstName},</p>
-                  <p>Nous avons bien reçu votre preuve de virement pour la commande <strong>${order.id}</strong>.</p>
-                  <p>Hervé va maintenant vérifier la transaction et préparer votre colis. Vous recevrez un mail dès que le colis sera expédié.</p>
-                  <p>Merci de votre patience et de votre confiance.</p>
-                </div>
-              `
+              subject: `Preuve de virement reçue - Commande ${data.id}`,
+              html: `<h2>Preuve bien reçue !</h2><p>Hervé va maintenant vérifier la transaction.</p>`
             });
           }
 
-          // To Admin
-          await resend.emails.send({
+          const adminEmailConfig: any = {
             from: "Appiotti Game Shop Alerts <onboarding@resend.dev>",
             to: [ADMIN_EMAIL],
-            subject: `NOUVELLE PREUVE - Commande ${order.id}`,
-            html: `
-              <div style="font-family: sans-serif; border: 2px solid #FF6B35; padding: 20px; border-radius: 10px;">
-                <h1 style="color: #FF6B35;">Alerte Preuve de Virement</h1>
-                <p>Client : <strong>${user.firstName} ${user.lastName}</strong> (${user.email})</p>
-                <p>Commande : <strong>${order.id}</strong></p>
-                <p>Montant : <strong>${order.totalTTC.toFixed(2)}€</strong></p>
-                <p>Action requise : Vérifier le virement et valider la commande dans le dashboard admin.</p>
-                ${proofUrl ? `<p><a href="${process.env.VITE_APP_URL || ''}${proofUrl}" style="background: #FF6B35; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Voir la preuve de virement</a></p>` : ''}
-              </div>
-            `
-          });
+            subject: `NOUVELLE PREUVE - Commande ${data.id}`,
+            html: `<h1>Alerte Preuve de Virement</h1><p>Client : ${user.firstName} ${user.lastName}</p>${proofUrl ? `<p><a href="${process.env.VITE_APP_URL || ''}${proofUrl}">Voir la preuve sur le site</a></p>` : ''}`
+          };
+
+          if (req.file) {
+            const fileName = req.file.filename;
+            const filePath = req.file.path;
+            const fileContent = fs.readFileSync(filePath);
+            
+            adminEmailConfig.attachments = [
+              {
+                filename: fileName,
+                content: fileContent,
+              }
+            ];
+          }
+
+          await resend.emails.send(adminEmailConfig);
         } catch (mailErr) {
-          console.error("Admin notification mail error:", mailErr);
+          console.error("Notification mail error:", mailErr);
         }
       }
 
-      res.json(orders[orderIndex]);
+      const mapped = {
+        ...data,
+        userId: data.user_id,
+        totalTTC: data.total_ttc,
+        proofUploaded: data.proof_uploaded,
+        proofUrl: data.proof_url,
+        createdAt: data.created_at
+      };
+      res.json(mapped);
     } catch (e) {
+      console.error("POST /api/orders/:id/proof error:", e);
       res.status(500).json({ error: "Erreur serveur" });
     }
-  });
-
-  // Debug endpoint (restricted to admin)
-  app.get("/api/debug/server", async (req, res) => {
-    const user = await getAuthUser(req);
-    if (!user || !user.isAdmin) return res.status(403).json({ error: "Accès refusé" });
-    
-    res.json({
-      env: {
-        hasSupabaseUrl: !!process.env.VITE_SUPABASE_URL,
-        hasSupabaseKey: !!process.env.VITE_SUPABASE_ANON_KEY,
-        hasResendKey: !!process.env.RESEND_API_KEY,
-        adminEmail: process.env.ADMIN_EMAIL || "askipas62@gmail.com",
-        nodeEnv: process.env.NODE_ENV
-      },
-      user,
-      files: {
-        ordersExist: fs.existsSync(ORDERS_FILE),
-        usersExist: fs.existsSync(USERS_FILE)
-      }
-    });
   });
 
   // Admin Routes
@@ -320,9 +344,26 @@ async function configureApp() {
     if (!user || !user.isAdmin) return res.status(403).json({ error: "Accès refusé" });
     
     try {
-      const orders = readDB(ORDERS_FILE);
-      res.json(orders);
+      const { data, error } = await supabase
+        .from("orders")
+        .select("*, profiles!inner(first_name, last_name, email)")
+        .order("created_at", { ascending: false });
+      
+      if (error) throw error;
+      
+      const mapped = data.map((o: any) => ({
+        ...o,
+        userId: o.user_id,
+        totalTTC: o.total_ttc,
+        proofUploaded: o.proof_uploaded,
+        proofUrl: o.proof_url,
+        createdAt: o.created_at,
+        userName: `${o.profiles.first_name} ${o.profiles.last_name}`,
+        userEmail: o.profiles.email
+      }));
+      res.json(mapped);
     } catch (e) {
+      console.error("GET /api/admin/orders error:", e);
       res.status(500).json({ error: "Erreur serveur" });
     }
   });
@@ -332,46 +373,41 @@ async function configureApp() {
     if (!user || !user.isAdmin) return res.status(403).json({ error: "Accès refusé" });
     
     try {
-      const orders = readDB(ORDERS_FILE);
-      const orderIndex = orders.findIndex((o: any) => o.id === req.params.id);
-      if (orderIndex === -1) return res.status(404).json({ error: "Commande non trouvée" });
-      
       const { status } = req.body;
-      orders[orderIndex].status = status;
-      writeDB(ORDERS_FILE, orders);
+      const { data: order, error } = await supabase
+        .from("orders")
+        .update({ status })
+        .eq("id", req.params.id)
+        .select("*, profiles!inner(first_name, last_name, email)")
+        .single();
 
-      // Send status update email to user
-      if (resend) {
-        const order = orders[orderIndex];
-        const users = readDB(USERS_FILE);
-        const orderUser = users.find((u: any) => u.id === order.userId);
-        
-        if (orderUser && orderUser.email) {
-          try {
-            await resend.emails.send({
-              from: "Appiotti Game Shop <onboarding@resend.dev>",
-              to: [orderUser.email],
-              subject: `Mise à jour de votre commande ${order.id}`,
-              html: `
-                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                  <h2 style="color: #FF6B35;">Le statut de votre commande a changé</h2>
-                  <p>Bonjour ${orderUser.firstName},</p>
-                  <p>Votre commande <strong>${order.id}</strong> est désormais : <strong style="color: #FF6B35; text-transform: uppercase;">${status}</strong></p>
-                  ${status === "Expédiée" ? `<p>Votre colis est en route ! Bonne réception.</p>` : ''}
-                  ${status === "Validée" ? `<p>Votre virement a été confirmé. Nous préparons votre colis.</p>` : ''}
-                  <p>Retrouvez tous les détails dans votre espace client.</p>
-                  <p>L'équipe Appiotti Game Shop</p>
-                </div>
-              `
-            });
-          } catch (mailErr) {
-            console.error("Status update mail error:", mailErr);
-          }
+      if (error) throw error;
+
+      // Send status update email
+      if (resend && order.profiles?.email) {
+        try {
+          await resend.emails.send({
+            from: "Appiotti Game Shop <onboarding@resend.dev>",
+            to: [order.profiles.email],
+            subject: `Mise à jour de votre commande ${order.id}`,
+            html: `<h2>Le statut de votre commande a changé</h2><p>Nouveau statut : ${status}</p>`
+          });
+        } catch (mailErr) {
+          console.error("Status update mail error:", mailErr);
         }
       }
 
-      res.json(orders[orderIndex]);
+      const mapped = {
+        ...order,
+        userId: order.user_id,
+        totalTTC: order.total_ttc,
+        proofUploaded: order.proof_uploaded,
+        proofUrl: order.proof_url,
+        createdAt: order.created_at
+      };
+      res.json(mapped);
     } catch (e) {
+      console.error("PATCH /api/admin/orders/:id error:", e);
       res.status(500).json({ error: "Erreur serveur" });
     }
   });
@@ -381,9 +417,11 @@ async function configureApp() {
     if (!user || !user.isAdmin) return res.status(403).json({ error: "Accès refusé" });
     
     try {
-      const users = readDB(USERS_FILE);
-      res.json(users);
+      const { data, error } = await supabase.from("profiles").select("*");
+      if (error) throw error;
+      res.json(data);
     } catch (e) {
+      console.error("GET /api/admin/users error:", e);
       res.status(500).json({ error: "Erreur serveur" });
     }
   });
@@ -393,9 +431,11 @@ async function configureApp() {
     if (!user || !user.isAdmin) return res.status(403).json({ error: "Accès refusé" });
     
     try {
-      const products = readDB(PRODUCTS_FILE);
-      res.json(products);
+      const { data, error } = await supabase.from("products").select("*");
+      if (error) throw error;
+      res.json(data);
     } catch (e) {
+      console.error("GET /api/admin/products error:", e);
       res.status(500).json({ error: "Erreur serveur" });
     }
   });
@@ -405,14 +445,17 @@ async function configureApp() {
     if (!user || !user.isAdmin) return res.status(403).json({ error: "Accès refusé" });
     
     try {
-      const products = readDB(PRODUCTS_FILE);
-      const index = products.findIndex((p: any) => p.id === req.params.id);
-      if (index === -1) return res.status(404).json({ error: "Produit non trouvé" });
-      
-      products[index] = { ...products[index], ...req.body };
-      writeDB(PRODUCTS_FILE, products);
-      res.json(products[index]);
+      const { data, error } = await supabase
+        .from("products")
+        .update(req.body)
+        .eq("id", req.params.id)
+        .select()
+        .single();
+        
+      if (error) throw error;
+      res.json(data);
     } catch (e) {
+      console.error("PATCH /api/admin/products/:id error:", e);
       res.status(500).json({ error: "Erreur serveur" });
     }
   });
@@ -422,54 +465,77 @@ async function configureApp() {
     if (!user || !user.isAdmin) return res.status(403).json({ error: "Accès refusé" });
     
     try {
-      const products = readDB(PRODUCTS_FILE);
-      const filtered = products.filter((p: any) => p.id !== req.params.id);
-      writeDB(PRODUCTS_FILE, filtered);
+      const { error } = await supabase
+        .from("products")
+        .delete()
+        .eq("id", req.params.id);
+        
+      if (error) throw error;
       res.json({ success: true });
     } catch (e) {
+      console.error("DELETE /api/admin/products/:id error:", e);
       res.status(500).json({ error: "Erreur serveur" });
     }
   });
 
   // Reviews Routes
-  app.get("/api/reviews", (req, res) => {
-    let reviews = readDB(REVIEWS_FILE);
-    const { productId } = req.query;
-    if (productId) {
-      reviews = reviews.filter((r: any) => r.productId === productId);
+  app.get("/api/reviews", async (req, res) => {
+    try {
+      let query = supabase.from("reviews").select("*");
+      const { productId } = req.query;
+      if (productId) query = query.eq("product_id", productId);
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      res.json(data);
+    } catch (e) {
+      console.error("GET /api/reviews error:", e);
+      res.status(500).json({ error: "Erreur serveur" });
     }
-    res.json(reviews);
   });
 
   app.post("/api/reviews", async (req, res) => {
     const user = await getAuthUser(req);
     if (!user) return res.status(401).json({ error: "Non autorisé" });
 
-    const { rating, comment, userName, productId } = req.body;
-    const reviews = readDB(REVIEWS_FILE);
-    const newReview = {
-      id: Date.now().toString(),
-      userId: user.id,
-      productId: productId || null, // Allow global reviews if no productId
-      userName: userName || `${user.firstName} ${user.lastName}`,
-      userEmail: user.email,
-      rating,
-      comment,
-      createdAt: new Date().toISOString()
-    };
-    reviews.push(newReview);
-    writeDB(REVIEWS_FILE, reviews);
-    res.json(newReview);
+    try {
+      const { rating, comment, userName, productId } = req.body;
+      const { data, error } = await supabase
+        .from("reviews")
+        .insert({
+          user_id: user.id,
+          product_id: productId || null,
+          user_name: userName || `${user.firstName} ${user.lastName}`,
+          rating,
+          comment
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      res.json(data);
+    } catch (e) {
+      console.error("POST /api/reviews error:", e);
+      res.status(500).json({ error: "Erreur serveur" });
+    }
   });
 
   app.delete("/api/reviews/:id", async (req, res) => {
     const user = await getAuthUser(req);
     if (!user || !user.isAdmin) return res.status(403).json({ error: "Accès refusé" });
 
-    const reviews = readDB(REVIEWS_FILE);
-    const filteredReviews = reviews.filter((r: any) => r.id !== req.params.id);
-    writeDB(REVIEWS_FILE, filteredReviews);
-    res.json({ success: true });
+    try {
+      const { error } = await supabase
+        .from("reviews")
+        .delete()
+        .eq("id", req.params.id);
+        
+      if (error) throw error;
+      res.json({ success: true });
+    } catch (e) {
+      console.error("DELETE /api/reviews/:id error:", e);
+      res.status(500).json({ error: "Erreur serveur" });
+    }
   });
 
   // Static files for uploads
