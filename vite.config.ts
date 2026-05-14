@@ -16,6 +16,10 @@ export default defineConfig(({mode}) => {
         '@': path.resolve(__dirname, 'src'),
       },
     },
+    build: {
+      outDir: 'dist/public',
+      emptyOutDir: true,
+    },
     server: {
       watch: {
         ignored: ['**/data/*.json', '**/public/uploads/**', '**/server.ts'],

@@ -483,6 +483,13 @@ async function startServer() {
     });
   });
 
+  // Serve static files from public/uploads
+  const uploadsPath = path.join(process.cwd(), "public", "uploads");
+  if (!fs.existsSync(uploadsPath)) {
+    fs.mkdirSync(uploadsPath, { recursive: true });
+  }
+  app.use("/uploads", express.static(uploadsPath));
+
   // Vite middleware
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
@@ -497,21 +504,21 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), "dist");
+    const distPath = path.join(process.cwd(), "dist", "public");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
 
-  const PORT = 3000;
+  const PORT = process.env.PORT || 3000;
   try {
-    app.listen(PORT, "0.0.0.0", () => {
+    app.listen(Number(PORT), "0.0.0.0", () => {
       console.log(`[Startup] Server successfully started and listening on http://0.0.0.0:${PORT}`);
       console.log(`[Startup] NODE_ENV: ${process.env.NODE_ENV}`);
     });
   } catch (err) {
-    console.error("[Startup] Failed to listen on port 3000:", err);
+    console.error(`[Startup] Failed to listen on port ${PORT}:`, err);
     process.exit(1);
   }
 }
