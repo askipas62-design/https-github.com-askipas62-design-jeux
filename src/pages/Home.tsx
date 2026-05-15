@@ -10,29 +10,15 @@ import { products as allProducts } from "../data/products";
 import { reviewService } from "../services/reviewService";
 
 function ReviewCarousel() {
-  const [reviews, setReviews] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    reviewService.getAll().then(data => {
-      // Add some default reviews if none in DB
-      if (data.length === 0) {
-        setReviews([
-          { id: "1", userName: "Jean Dupont", rating: 4, comment: "J'ai reçu ma commande à temps mais il y manquait un pied, j'ai dû attendre 5 jours pour le recevoir. Sinon le produit est top.", createdAt: new Date().toISOString() },
-          { id: "2", userName: "Marie Curie", rating: 4, comment: "Très bon jeu, la qualité est au rendez-vous mais le montage est assez difficile, prévoyez du temps !", createdAt: new Date().toISOString() },
-          { id: "3", userName: "Pierre Gasly", rating: 5, comment: "Super expérience avec Hervé, très réactif et professionnel. Je recommande vivement.", createdAt: new Date().toISOString() }
-        ]);
-      } else {
-        setReviews(data);
-      }
-    }).finally(() => setLoading(false));
-  }, []);
-
-  if (loading) return null;
+  const reviews = [
+    { id: "1", userName: "Jean Dupont", rating: 4, comment: "J'ai reçu ma commande à temps mais il y manquait un pied, j'ai dû attendre 5 jours pour le recevoir. Sinon le produit est top.", createdAt: new Date().toISOString() },
+    { id: "2", userName: "Marie Curie", rating: 4, comment: "Très bon jeu, la qualité est au rendez-vous mais le montage est assez difficile, prévoyez du temps !", createdAt: new Date().toISOString() },
+    { id: "3", userName: "Pierre Gasly", rating: 5, comment: "Super expérience avec Hervé, très réactif et professionnel. Je recommande vivement.", createdAt: new Date().toISOString() }
+  ];
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-      {reviews.slice(0, 3).map((review, idx) => (
+      {reviews.map((review, idx) => (
         <motion.div 
           key={review.id}
           initial={{ opacity: 0, scale: 0.9 }}
