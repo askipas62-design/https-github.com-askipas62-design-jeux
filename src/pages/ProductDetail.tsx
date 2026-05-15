@@ -37,7 +37,7 @@ export default function ProductDetail() {
   const getImageUrl = (path: string) => {
     if (!path) return "/images/placeholder.jpg";
     if (path.startsWith("http")) return path;
-    return `${window.location.origin}${path.startsWith('/') ? '' : '/'}${path}`;
+    return path.startsWith('/') ? path : `/${path}`;
   };
 
   const fetchReviews = async () => {

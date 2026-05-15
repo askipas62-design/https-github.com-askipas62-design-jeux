@@ -1,4 +1,4 @@
-const API_URL = window.location.origin; // Use current origin for API calls in production
+const API_URL = ""; // Use relative paths for API calls in production
 
 export interface Order {
   id: string;

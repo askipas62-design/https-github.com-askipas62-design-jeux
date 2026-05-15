@@ -54,7 +54,7 @@ export default function ClientDashboard() {
   const getImageUrl = (path: string) => {
     if (!path) return null;
     if (path.startsWith("http")) return path;
-    return `${window.location.origin}${path.startsWith('/') ? '' : '/'}${path}`;
+    return path.startsWith('/') ? path : `/${path}`;
   };
 
   const favoriteProducts = useMemo(() => {

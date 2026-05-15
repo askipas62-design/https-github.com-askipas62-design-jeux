@@ -191,6 +191,17 @@ async function startServer() {
     next();
   });
 
+  // Runtime environment config for frontend
+  app.get("/env.js", (req, res) => {
+    const config = {
+      VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL,
+      VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY,
+      NODE_ENV: process.env.NODE_ENV
+    };
+    res.setHeader("Content-Type", "application/javascript");
+    res.send(`window.env = ${JSON.stringify(config)};`);
+  });
+
   // Health check
   app.get("/api/health", (req, res) => {
     res.json({ 

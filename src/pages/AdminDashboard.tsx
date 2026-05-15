@@ -146,7 +146,7 @@ export default function AdminDashboard() {
   const getImageUrl = (path: string) => {
     if (!path) return null;
     if (path.startsWith("http")) return path;
-    return `${window.location.origin}${path.startsWith('/') ? '' : '/'}${path}`;
+    return path.startsWith('/') ? path : `/${path}`;
   };
 
   return (

@@ -1,4 +1,4 @@
-const API_URL = window.location.origin; // Relative to the same domain
+const API_URL = ""; // Relative to the same domain
 
 const getHeaders = () => ({
   "Content-Type": "application/json",

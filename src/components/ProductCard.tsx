@@ -23,8 +23,7 @@ export default function ProductCard({ product }: ProductCardProps) {
   const getImageUrl = (path: string) => {
     if (!path) return "/images/placeholder.jpg";
     if (path.startsWith("http")) return path;
-    // For Railway, we serve from window.location.origin
-    return `${window.location.origin}${path.startsWith('/') ? '' : '/'}${path}`;
+    return path.startsWith('/') ? path : `/${path}`;
   };
 
   const handleAddToCart = (e: React.MouseEvent) => {
