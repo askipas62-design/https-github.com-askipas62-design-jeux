@@ -9,10 +9,11 @@ import { Resend } from "resend";
 const APP_ROOT = process.cwd();
 console.log(`[Startup] APP_ROOT: ${APP_ROOT}`);
 
-// Helper to clean environment variables (remove quotes and spaces)
+// Helper to clean environment variables (remove quotes, backticks and spaces)
 const cleanEnv = (val: string | undefined) => {
   if (!val) return "";
-  return val.replace(/['"]+/g, '').trim();
+  // Remove ', ", and ` characters
+  return val.replace(/['"`]+/g, '').trim();
 };
 
 // Initialize Supabase
@@ -42,6 +43,8 @@ if (supabaseUrl && supabaseUrl.startsWith("http")) {
   } catch (err) {
     console.error("[Startup] Failed to initialize Supabase:", err);
   }
+} else {
+  console.error(`[Startup] CRITICAL: Supabase URL is invalid or missing. Starts with: "${supabaseUrl.substring(0, 10)}..."`);
 }
 
 // Initialize Resend
